@@ -1,0 +1,17 @@
+{
+  "name": "sundial",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A zero-dependency solar clock: the sun's true position, its day arc and the analemma.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [
+    "solar",
+    "astronomy",
+    "sundial",
+    "analemma",
+    "equation-of-time",
+    "svg"
+  ]
+}

@@ -1,0 +1,800 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sundial — where the sun is, right now</title>
+<meta name="description" content="A zero-dependency solar clock: the sun's true position, its day arc and the analemma, computed from latitude, longitude and the equation of time.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='9' fill='%23ffb454'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #080b10;
+    --panel: #0f151d;
+    --panel-2: #121a24;
+    --line: rgba(255, 255, 255, 0.075);
+    --ink: #e9eff7;
+    --muted: #93a3b6;
+    --sun: #ffb454;
+    --sun-soft: rgba(255, 180, 84, 0.16);
+    --radius: 16px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { margin: 0; }
+
+  body {
+    min-height: 100vh;
+    padding: 40px 20px 64px;
+    color: var(--ink);
+    background:
+      radial-gradient(900px 520px at 10% -12%, rgba(255, 180, 84, 0.10), transparent 62%),
+      radial-gradient(760px 460px at 100% 0%, rgba(86, 145, 220, 0.10), transparent 60%),
+      var(--bg);
+    font: 16px/1.55 ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  header { margin-bottom: 26px; }
+
+  h1 {
+    margin: 0 0 6px;
+    font-size: clamp(30px, 4.4vw, 44px);
+    font-weight: 650;
+    letter-spacing: -0.025em;
+  }
+
+  h1 span { color: #ffb454; }
+
+  header p {
+    margin: 0;
+    max-width: 64ch;
+    color: var(--muted);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr);
+    gap: 18px;
+    align-items: stretch;
+  }
+
+  .card {
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px;
+    box-shadow: 0 24px 48px -36px #000;
+  }
+
+  figure { margin: 0; }
+
+  svg { display: block; width: 100%; height: auto; }
+
+  figcaption {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+
+  .sky-card { grid-row: span 2; display: flex; flex-direction: column; }
+
+  .sky-card svg { flex: 1 1 auto; min-height: 0; }
+
+  /* Stats */
+
+  .stats dl { margin: 0; }
+
+  .stat {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 8px 2px;
+    border-bottom: 1px dashed var(--line);
+  }
+
+  .stat:last-child { border-bottom: 0; }
+
+  .stat dt {
+    color: var(--muted);
+    font-size: 13.5px;
+    letter-spacing: 0.015em;
+  }
+
+  .stat dd {
+    margin: 0;
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  .stat.hero dd { color: #ffb454; font-size: 19px; }
+
+  /* Controls */
+
+  .controls { margin-top: 18px; }
+
+  .fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    gap: 14px;
+  }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+
+  .field.wide { grid-column: span 2; }
+
+  .field > span {
+    font-size: 11.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  input[type="date"],
+  input[type="number"] {
+    width: 100%;
+    padding: 9px 11px;
+    color: var(--ink);
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    font: inherit;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    color-scheme: dark;
+  }
+
+  input[type="range"] {
+    width: 100%;
+    margin: 6px 0;
+    accent-color: #ffb454;
+  }
+
+  input:focus-visible,
+  button:focus-visible {
+    outline: 2px solid #ffb454;
+    outline-offset: 2px;
+  }
+
+  .time-row { display: flex; align-items: center; gap: 12px; }
+
+  .time-row output {
+    min-width: 5.2ch;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 16px;
+  }
+
+  button {
+    padding: 9px 15px;
+    color: var(--ink);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    font: inherit;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+  }
+
+  button:hover { background: rgba(255, 255, 255, 0.09); border-color: rgba(255, 255, 255, 0.16); }
+  button:active { transform: translateY(1px); }
+
+  button.primary {
+    color: #171006;
+    background: #ffb454;
+    border-color: transparent;
+    font-weight: 600;
+  }
+
+  button.primary:hover { background: #ffc26f; }
+
+  .status {
+    margin: 12px 2px 0;
+    min-height: 1.2em;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  /* SVG text */
+
+  .svg-label {
+    fill: var(--muted);
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+  }
+
+  .svg-cardinal {
+    fill: var(--ink);
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+  }
+
+  .svg-small {
+    fill: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 9.5px;
+  }
+
+  .svg-title {
+    fill: var(--muted);
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  @media (max-width: 820px) {
+    .grid { grid-template-columns: minmax(0, 1fr); }
+    .sky-card { grid-row: auto; }
+    .field.wide { grid-column: span 1; }
+    body { padding-top: 28px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    button { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Sundial<span>.</span></h1>
+    <p>
+      A solar clock with no dependencies and no network. It works out where the sun
+      actually is from your latitude, longitude and the equation of time — then draws
+      the sky around it.
+    </p>
+  </header>
+
+  <div class="grid">
+    <figure class="card sky-card">
+      <svg id="sky" viewBox="0 0 440 440" role="img" aria-label="Polar sky chart showing the sun's path and current position"></svg>
+      <figcaption>
+        A view of the whole sky, zenith at the centre and the horizon at the rim.
+        The amber curve is today's solar track; the dots on the rim are sunrise and sunset.
+      </figcaption>
+    </figure>
+
+    <div class="card stats">
+      <dl id="stats"></dl>
+    </div>
+
+    <figure class="card">
+      <svg id="analemma" viewBox="0 0 440 330" role="img" aria-label="Analemma plotting equation of time against solar declination"></svg>
+      <figcaption>
+        The analemma: where the sun sits at noon through the year. Horizontal is how
+        many minutes the sundial runs ahead of the clock; vertical is the sun's declination.
+      </figcaption>
+    </figure>
+  </div>
+
+  <section class="card controls" aria-label="Location and time">
+    <div class="fields">
+      <label class="field">
+        <span>Date</span>
+        <input id="date" type="date">
+      </label>
+
+      <label class="field wide">
+        <span>Local time</span>
+        <span class="time-row">
+          <input id="time" type="range" min="0" max="1439" step="1" value="720">
+          <output id="time-out" for="time">12:00</output>
+        </span>
+      </label>
+
+      <label class="field">
+        <span>Latitude</span>
+        <input id="lat" type="number" step="0.0001" min="-90" max="90" value="51.4779">
+      </label>
+
+      <label class="field">
+        <span>Longitude</span>
+        <input id="lon" type="number" step="0.0001" min="-180" max="180" value="-0.0015">
+      </label>
+
+      <label class="field">
+        <span>UTC offset (h)</span>
+        <input id="tz" type="number" step="0.25" min="-14" max="14" value="0">
+      </label>
+    </div>
+
+    <div class="actions">
+      <button id="now" class="primary" type="button">Now</button>
+      <button id="geo" type="button">Use my location</button>
+      <button id="play" type="button" aria-pressed="false">Play the day</button>
+    </div>
+
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+  </section>
+</div>
+
+<script src="src/solar.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var Solar = window.Solar;
+  var SVGNS = "http://www.w3.org/2000/svg";
+  var STORE_KEY = "sundial:v1";
+  var SKY = { cx: 220, cy: 220, R: 176 };
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  function pad2(n) { return String(n).padStart(2, "0"); }
+
+  function isoToday() {
+    var d = new Date();
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+  }
+
+  function nowMinutes() {
+    var d = new Date();
+    return d.getHours() * 60 + d.getMinutes();
+  }
+
+  function localOffsetHours() {
+    return -new Date().getTimezoneOffset() / 60;
+  }
+
+  function clamp(x, lo, hi) { return x < lo ? lo : x > hi ? hi : x; }
+
+  function defaults() {
+    var tz = localOffsetHours();
+    return {
+      date: isoToday(),
+      minutes: nowMinutes(),
+      // A self-consistent starting point: the middle of the local time zone,
+      // at a middling northern latitude. "Use my location" replaces it.
+      lat: 40,
+      lon: Math.round(tz * 15),
+      tz: tz
+    };
+  }
+
+  function load() {
+    var base = defaults();
+    try {
+      var saved = JSON.parse(localStorage.getItem(STORE_KEY) || "{}");
+      Object.keys(base).forEach(function (key) {
+        if (typeof saved[key] === typeof base[key] && isFinite(saved[key])) base[key] = saved[key];
+      });
+      if (typeof saved.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(saved.date)) {
+        base.date = saved.date;
+      }
+    } catch (e) { /* ignore corrupt storage */ }
+    return base;
+  }
+
+  var state = load();
+
+  function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* private mode */ }
+  }
+
+  /* ---------- SVG helpers ---------- */
+
+  function svgEl(name, attrs, text) {
+    var node = document.createElementNS(SVGNS, name);
+    if (attrs) {
+      Object.keys(attrs).forEach(function (k) { node.setAttribute(k, attrs[k]); });
+    }
+    if (text != null) node.textContent = text;
+    return node;
+  }
+
+  function clear(node) {
+    while (node.firstChild) node.removeChild(node.firstChild);
+  }
+
+  function project(altitude, azimuth) {
+    var r = clamp((90 - altitude) / 90, 0, 1.35) * SKY.R;
+    var a = azimuth * Math.PI / 180;
+    return { x: SKY.cx + r * Math.sin(a), y: SKY.cy - r * Math.cos(a) };
+  }
+
+  /* ---------- Sky chart ---------- */
+
+  function drawSky(pos, path, times, lat, lon, tz) {
+    var svg = $("sky");
+    clear(svg);
+
+    var defs = svgEl("defs");
+    var grad = svgEl("radialGradient", { id: "skyGrad", cx: "50%", cy: "45%", r: "65%" });
+    grad.appendChild(svgEl("stop", { offset: "0%", "stop-color": "#1d3048" }));
+    grad.appendChild(svgEl("stop", { offset: "62%", "stop-color": "#132133" }));
+    grad.appendChild(svgEl("stop", { offset: "100%", "stop-color": "#0a1119" }));
+    defs.appendChild(grad);
+    var glow = svgEl("radialGradient", { id: "sunGlow" });
+    glow.appendChild(svgEl("stop", { offset: "0%", "stop-color": "#ffcf8a", "stop-opacity": "0.55" }));
+    glow.appendChild(svgEl("stop", { offset: "100%", "stop-color": "#ffb454", "stop-opacity": "0" }));
+    defs.appendChild(glow);
+    var clip = svgEl("clipPath", { id: "horizonClip" });
+    clip.appendChild(svgEl("circle", { cx: SKY.cx, cy: SKY.cy, r: SKY.R }));
+    defs.appendChild(clip);
+    svg.appendChild(defs);
+
+    svg.appendChild(svgEl("circle", { cx: SKY.cx, cy: SKY.cy, r: SKY.R, fill: "url(#skyGrad)" }));
+
+    // Altitude rings and the axes they hang from.
+    [30, 60].forEach(function (alt) {
+      var r = (90 - alt) / 90 * SKY.R;
+      svg.appendChild(svgEl("circle", {
+        cx: SKY.cx, cy: SKY.cy, r: r,
+        fill: "none", stroke: "rgba(255,255,255,0.10)", "stroke-width": "1"
+      }));
+      svg.appendChild(svgEl("text", {
+        x: SKY.cx + 6, y: SKY.cy - r + 4, class: "svg-small"
+      }, alt + "°"));
+    });
+
+    svg.appendChild(svgEl("line", {
+      x1: SKY.cx, y1: SKY.cy - SKY.R, x2: SKY.cx, y2: SKY.cy + SKY.R,
+      stroke: "rgba(255,255,255,0.07)", "stroke-width": "1"
+    }));
+    svg.appendChild(svgEl("line", {
+      x1: SKY.cx - SKY.R, y1: SKY.cy, x2: SKY.cx + SKY.R, y2: SKY.cy,
+      stroke: "rgba(255,255,255,0.07)", "stroke-width": "1"
+    }));
+
+    // The horizon.
+    svg.appendChild(svgEl("circle", {
+      cx: SKY.cx, cy: SKY.cy, r: SKY.R,
+      fill: "none", stroke: "rgba(255,255,255,0.30)", "stroke-width": "1.5"
+    }));
+
+    var cardinals = [["N", 0], ["E", 90], ["S", 180], ["W", 270]];
+    cardinals.forEach(function (entry) {
+      var p = project(0, entry[1]);
+      var len = 1.085;
+      svg.appendChild(svgEl("line", {
+        x1: SKY.cx + (p.x - SKY.cx) * 0.985,
+        y1: SKY.cy + (p.y - SKY.cy) * 0.985,
+        x2: SKY.cx + (p.x - SKY.cx) * len,
+        y2: SKY.cy + (p.y - SKY.cy) * len,
+        stroke: "rgba(255,255,255,0.28)", "stroke-width": "1"
+      }));
+      svg.appendChild(svgEl("text", {
+        x: SKY.cx + (p.x - SKY.cx) * 1.145,
+        y: SKY.cy + (p.y - SKY.cy) * 1.145 + 4,
+        "text-anchor": "middle",
+        class: "svg-cardinal"
+      }, entry[0]));
+    });
+
+    // Today's track, clipped to the sky.
+    var dayPath = svgEl("path", {
+      fill: "none", stroke: "#ffb454", "stroke-width": "2",
+      "stroke-linecap": "round", "stroke-linejoin": "round",
+      opacity: "0.85", "clip-path": "url(#horizonClip)"
+    });
+    var d = "";
+    var drawing = false;
+    path.forEach(function (p) {
+      if (p.altitude < -0.4) { drawing = false; return; }
+      var pt = project(p.altitude, p.azimuth);
+      d += (drawing ? " L " : " M ") + pt.x.toFixed(1) + " " + pt.y.toFixed(1);
+      drawing = true;
+    });
+    dayPath.setAttribute("d", d);
+    svg.appendChild(dayPath);
+
+    // Sunrise and sunset marks on the rim.
+    if (times.dayLength > 0.05 && times.dayLength < 23.95) {
+      [times.sunrise, times.sunset].forEach(function (minutes) {
+        var moment = Solar.utcFromWallClock(
+          Number(state.date.slice(0, 4)),
+          Number(state.date.slice(5, 7)) - 1,
+          Number(state.date.slice(8, 10)),
+          minutes, Math.round(tz)
+        );
+        var edge = Solar.sunPosition(moment, lat, lon, tz);
+        var ep = project(0, edge.azimuth);
+        svg.appendChild(svgEl("circle", {
+          cx: ep.x, cy: ep.y, r: 4,
+          fill: "#0a1119", stroke: "#ffb454", "stroke-width": "1.6"
+        }));
+      });
+    }
+
+    // The sun itself.
+    if (pos.altitude > Solar.SUNRISE_ALTITUDE) {
+      var sp = project(pos.altitude, pos.azimuth);
+      svg.appendChild(svgEl("circle", { cx: sp.x, cy: sp.y, r: 34, fill: "url(#sunGlow)" }));
+      svg.appendChild(svgEl("line", {
+        x1: SKY.cx, y1: SKY.cy, x2: sp.x, y2: sp.y,
+        stroke: "rgba(255,180,84,0.28)", "stroke-width": "1", "stroke-dasharray": "3 5"
+      }));
+      svg.appendChild(svgEl("circle", { cx: sp.x, cy: sp.y, r: 6.5, fill: "#ffc470" }));
+      svg.appendChild(svgEl("circle", { cx: sp.x, cy: sp.y, r: 11, fill: "none", stroke: "rgba(255,180,84,0.35)", "stroke-width": "1" }));
+    }
+  }
+
+  /* ---------- Analemma ---------- */
+
+  function drawAnalemma(dayDate, year) {
+    var svg = $("analemma");
+    clear(svg);
+
+    var points = Solar.analemma(year);
+    var eots = points.map(function (p) { return p.eot; });
+    var padL = 46, padR = 18, padT = 22, padB = 42;
+    var w = 440 - padL - padR;
+    var h = 330 - padT - padB;
+
+    var x0 = Math.floor(Math.min.apply(null, eots)) - 1;
+    var x1 = Math.ceil(Math.max.apply(null, eots)) + 1;
+    var y0 = -25, y1 = 25;
+
+    function X(eot) { return padL + (eot - x0) / (x1 - x0) * w; }
+    function Y(dec) { return padT + (y1 - dec) / (y1 - y0) * h; }
+
+    // Zero lines: no equation of time, and the celestial equator.
+    svg.appendChild(svgEl("line", {
+      x1: X(0), y1: padT, x2: X(0), y2: padT + h,
+      stroke: "rgba(255,255,255,0.12)", "stroke-width": "1"
+    }));
+    svg.appendChild(svgEl("line", {
+      x1: padL, y1: Y(0), x2: padL + w, y2: Y(0),
+      stroke: "rgba(255,255,255,0.12)", "stroke-width": "1"
+    }));
+
+    [-20, 0, 20].forEach(function (dec) {
+      var label = dec === 0 ? "0°" : dec > 0 ? dec + "°" : "−" + Math.abs(dec) + "°";
+      svg.appendChild(svgEl("text", {
+        x: padL - 8, y: Y(dec) + 3.5, "text-anchor": "end", class: "svg-small"
+      }, label));
+    });
+
+    svg.appendChild(svgEl("text", { x: padL, y: 12, class: "svg-title" }, "declination"));
+    svg.appendChild(svgEl("text", {
+      x: padL + w, y: padT + h + 34, "text-anchor": "end", class: "svg-title"
+    }, "minutes fast →"));
+
+    // The figure eight, then the months that mark it.
+    var d = points.map(function (p, i) {
+      return (i ? " L " : " M ") + X(p.eot).toFixed(1) + " " + Y(p.declination).toFixed(1);
+    }).join("");
+    svg.appendChild(svgEl("path", {
+      d: d, fill: "none", stroke: "rgba(255,180,84,0.55)", "stroke-width": "2",
+      "stroke-linejoin": "round"
+    }));
+
+    // A dot for each month, and names only on the four extremes so the
+    // crossing in spring and autumn stays readable.
+    var labelled = { 0: "Jan", 1: "Feb", 6: "Jul", 10: "Nov" };
+    for (var month = 0; month < 12; month++) {
+      var monthDate = new Date(Date.UTC(year, month, 1, 12));
+      var px = X(Solar.equationOfTime(monthDate));
+      var py = Y(Solar.declination(monthDate));
+      svg.appendChild(svgEl("circle", { cx: px, cy: py, r: 2.2, fill: "rgba(255,180,84,0.7)" }));
+      if (labelled[month]) {
+        var angle = Math.atan2(py - (padT + h / 2), px - (padL + w / 2));
+        svg.appendChild(svgEl("text", {
+          x: px + Math.cos(angle) * 16,
+          y: py + Math.sin(angle) * 16 + 3,
+          "text-anchor": "middle",
+          class: "svg-small"
+        }, labelled[month]));
+      }
+    }
+
+    // Today.
+    var tx = X(Solar.equationOfTime(dayDate));
+    var ty = Y(Solar.declination(dayDate));
+    svg.appendChild(svgEl("circle", { cx: tx, cy: ty, r: 10, fill: "rgba(255,180,84,0.18)" }));
+    svg.appendChild(svgEl("circle", {
+      cx: tx, cy: ty, r: 4.6, fill: "#ffb454", stroke: "#0a1119", "stroke-width": "2"
+    }));
+  }
+
+  /* ---------- Readouts ---------- */
+
+  function compass(azimuth) {
+    var dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+                "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+    return dirs[Math.round(azimuth / 22.5) % 16];
+  }
+
+  function signed(value, digits) {
+    var text = value.toFixed(digits);
+    return (value > 0 ? "+" : "") + text;
+  }
+
+  function dayLengthText(hours) {
+    var total = Math.round(hours * 60);
+    return Math.floor(total / 60) + " h " + pad2(total % 60) + " m";
+  }
+
+  function drawStats(pos, times, eot, minutes, tz) {
+    var dl = $("stats");
+    clear(dl);
+
+    var up = pos.altitude > Solar.SUNRISE_ALTITUDE;
+    var rows = [
+      ["Local time", Solar.formatMinutes(minutes), true],
+      ["Sun", up ? "up" : "down"],
+      ["Altitude", pos.altitude.toFixed(1) + "°"],
+      ["Azimuth", Math.round(pos.azimuth) + "° " + compass(pos.azimuth)],
+      ["Declination", signed(pos.declination, 1) + "°"],
+      ["Equation of time", signed(eot, 1) + " min"],
+      ["Sunrise", times.dayLength > 0.05 && times.dayLength < 23.95 ? Solar.formatMinutes(times.sunrise) : "—"],
+      ["Solar noon", Solar.formatMinutes(times.solarNoon)],
+      ["Sunset", times.dayLength > 0.05 && times.dayLength < 23.95 ? Solar.formatMinutes(times.sunset) : "—"],
+      ["Day length", times.dayLength > 23.95 ? "24 h" : times.dayLength < 0.05 ? "0 h" : dayLengthText(times.dayLength)],
+      ["UTC offset", (tz >= 0 ? "+" : "") + tz + " h"]
+    ];
+
+    rows.forEach(function (row) {
+      var div = document.createElement("div");
+      div.className = "stat" + (row[2] ? " hero" : "");
+      var dt = document.createElement("dt");
+      dt.textContent = row[0];
+      var dd = document.createElement("dd");
+      dd.textContent = row[1];
+      div.appendChild(dt);
+      div.appendChild(dd);
+      dl.appendChild(div);
+    });
+  }
+
+  /* ---------- Render ---------- */
+
+  function render(skipAnalemma) {
+    var parts = state.date.split("-").map(Number);
+    var year = parts[0], month = parts[1], day = parts[2];
+    var tz = Math.round(state.tz * 60);
+    var dayNoon = new Date(Date.UTC(year, month - 1, day, 12));
+
+    var moment = Solar.utcFromWallClock(year, month - 1, day, state.minutes, tz);
+    var pos = Solar.sunPosition(moment, state.lat, state.lon, tz);
+    var times = Solar.sunTimes(dayNoon, state.lat, state.lon, tz);
+    var path = Solar.sunPath(dayNoon, state.lat, state.lon, tz, 4);
+    var eot = Solar.equationOfTime(moment);
+
+    drawSky(pos, path, times, state.lat, state.lon, tz);
+    if (!skipAnalemma) drawAnalemma(dayNoon, year);
+    drawStats(pos, times, eot, state.minutes, state.tz);
+  }
+
+  /* ---------- Controls ---------- */
+
+  var dateInput = $("date");
+  var timeInput = $("time");
+  var timeOut = $("time-out");
+  var latInput = $("lat");
+  var lonInput = $("lon");
+  var tzInput = $("tz");
+  var status = $("status");
+
+  function syncInputs() {
+    dateInput.value = state.date;
+    timeInput.value = String(Math.round(state.minutes));
+    timeOut.textContent = Solar.formatMinutes(state.minutes);
+    latInput.value = String(state.lat);
+    lonInput.value = String(state.lon);
+    tzInput.value = String(state.tz);
+  }
+
+  var frame = 0;
+  function scheduleRender() {
+    if (frame) return;
+    frame = requestAnimationFrame(function () {
+      frame = 0;
+      render();
+    });
+  }
+
+  dateInput.addEventListener("change", function () {
+    if (!dateInput.value) return;
+    state.date = dateInput.value;
+    save();
+    render();
+  });
+
+  timeInput.addEventListener("input", function () {
+    state.minutes = Number(timeInput.value);
+    timeOut.textContent = Solar.formatMinutes(state.minutes);
+    save();
+    scheduleRender();
+  });
+
+  function bindNumber(input, key, min, max) {
+    input.addEventListener("input", function () {
+      var value = Number(input.value);
+      if (!isFinite(value)) return;
+      state[key] = clamp(value, min, max);
+      save();
+      scheduleRender();
+    });
+    input.addEventListener("blur", function () {
+      syncInputs();
+      render();
+    });
+  }
+
+  bindNumber(latInput, "lat", -90, 90);
+  bindNumber(lonInput, "lon", -180, 180);
+  bindNumber(tzInput, "tz", -14, 14);
+
+  $("now").addEventListener("click", function () {
+    stop();
+    state.date = isoToday();
+    state.minutes = nowMinutes();
+    state.tz = localOffsetHours();
+    syncInputs();
+    save();
+    render();
+    status.textContent = "";
+  });
+
+  $("geo").addEventListener("click", function () {
+    if (!navigator.geolocation) {
+      status.textContent = "This browser has no geolocation. Enter coordinates by hand.";
+      return;
+    }
+    status.textContent = "Asking the browser for your location…";
+    navigator.geolocation.getCurrentPosition(function (result) {
+      state.lat = Math.round(result.coords.latitude * 10000) / 10000;
+      state.lon = Math.round(result.coords.longitude * 10000) / 10000;
+      state.tz = localOffsetHours();
+      syncInputs();
+      save();
+      render();
+      status.textContent = "Using " + state.lat + ", " + state.lon + ".";
+    }, function (error) {
+      status.textContent = "Could not get a location (" + error.message + "). Enter coordinates by hand.";
+    }, { timeout: 10000, maximumAge: 600000 });
+  });
+
+  var timer = null;
+  var playButton = $("play");
+
+  function stop() {
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+    playButton.textContent = "Play the day";
+    playButton.setAttribute("aria-pressed", "false");
+  }
+
+  playButton.addEventListener("click", function () {
+    if (timer) { stop(); return; }
+    playButton.textContent = "Pause";
+    playButton.setAttribute("aria-pressed", "true");
+    timer = setInterval(function () {
+      state.minutes = (state.minutes + 4) % 1440;
+      timeInput.value = String(Math.round(state.minutes));
+      timeOut.textContent = Solar.formatMinutes(state.minutes);
+      render(true);
+    }, 60);
+  });
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) stop();
+  });
+
+  syncInputs();
+  render();
+})();
+</script>
+</body>
+</html>
