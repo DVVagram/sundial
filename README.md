@@ -4,6 +4,8 @@ A solar clock with no dependencies and no network. Give it a latitude, a
 longitude and a time, and it draws where the sun really is — not where the
 clock says it should be.
 
+**[Open it live →](https://dvvagram.github.io/sundial/)**
+
 ![Sundial, showing a late-November noon at 40°N](docs/sundial.png)
 
 ## What it shows
